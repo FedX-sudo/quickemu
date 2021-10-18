@@ -183,6 +183,7 @@ function vm_boot() {
   local NET_DEVICE="virtio-net"
   local OSK=""
   local QEMU_VER=""
+  local SMM="off"
   local USB_HOST_PASSTHROUGH_CONTROLLER="qemu-xhci"
   local VIDEO=""
 
@@ -443,6 +444,7 @@ function vm_boot() {
       if [ -z "${disk_size}" ]; then
         disk_size="64G"
       fi
+      SMM="on"
       ;;
     *)
       CPU="-cpu host,kvm=on"
@@ -717,7 +719,7 @@ function vm_boot() {
 
   # shellcheck disable=SC2054,SC2206,SC2140
   args+=(-name ${VMNAME},process=${VMNAME}
-         -enable-kvm -machine q35,vmport=off ${GUEST_TWEAKS}
+         -enable-kvm -machine q35,smm=${SMM},vmport=off ${GUEST_TWEAKS}
          ${CPU} ${SMP}
          -m ${RAM_VM} ${BALLOON}
          -smbios type=2,manufacturer="Wimpys World",product="Quickemu",version="${VERSION}",serial="jvzclfjbeyq.pbz",location="wimpysworld.com",asset="${VMNAME}"
