@@ -1,6 +1,36 @@
 #!/usr/bin/env bash
 export LC_ALL=C
 
+function ignore_msrs_always() {
+  # Make sure the host has /etc/modprobe.d
+  if [ -d /etc/modprobe.d ]; then
+    # Skip if ignore_msrs is already enabled, assumes initramfs has been rebuilt
+    if grep -lq 'ignore_msrs=Y' /etc/modprobe.d/kvm-quickemu.conf >/dev/null 2>&1; then
+      echo "options kvm ignore_msrs=Y" | sudo tee /etc/modprobe.d/kvm-quickemu.conf
+      sudo update-initramfs -k all -u
+    fi
+  else
+    echo "ERROR! /etc/modprobe.d was not found, I don't know how to configure this system."
+    exit 1
+  fi
+}
+
+function ignore_msrs_alert() {
+  local ignore_msrs=""
+  if [ -e /sys/module/kvm/parameters/ignore_msrs ]; then
+    ignore_msrs=$(cat /sys/module/kvm/parameters/ignore_msrs)
+    if [ "${ignore_msrs}" == "N" ]; then
+      echo " - MSR:      WARNING! Ignoring unhandled Model-Specific Registers is disabled."
+      echo
+      echo "             echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs"
+      echo
+      echo "             If you are unable to run macOS or Windows VMs then run the above 👆"
+      echo "             This will enable ignoring of unhandled MSRs until you reboot the host."
+      echo "             You can make this change permenant by running: 'quickemu --ignore-msrs-always'"
+    fi
+  fi
+}
+
 function disk_delete() {
   if [ -e "${disk_img}" ]; then
     rm "${disk_img}"
@@ -390,7 +420,7 @@ function vm_boot() {
 
   # Make any OS specific adjustments
   case ${guest_os} in
-    freebsd|linux)
+    freebsd|linux|openbsd)
       CPU="-cpu host,kvm=on"
       if [ "${HOST_CPU_VENDOR}" == "AuthenticAMD" ]; then
         CPU="${CPU},topoext"
@@ -531,6 +561,13 @@ function vm_boot() {
     # If there is a disk image that appears to be used do not boot from installation media.
     iso=""
     img=""
+  else
+    if [ "${guest_os}" == "macos" ] || [ "${guest_os}" == "windows" ]; then
+      # Display MSRs alert if the disk appears unused and guest is macOS or Windows
+      # Assume that a "used" disk has a working install, therefore no alerts are
+      # required.
+      ignore_msrs_alert
+    fi
   fi
 
   # Has the status quo been requested?
@@ -811,16 +848,16 @@ function vm_boot() {
     if [ -n "${img}" ]; then
       # shellcheck disable=SC2054
       args+=(-device ide-hd,bus=ahci.1,drive=RecoveryImage
-             -drive id=RecoveryImage,if=none,format=raw,file="${img}",cache=none,aio=native)
+             -drive id=RecoveryImage,if=none,format=raw,file="${img}")
     fi
 
     # shellcheck disable=SC2054,SC2206
     args+=(-device ${MAC_DISK_DEV},drive=SystemDisk
-           -drive id=SystemDisk,if=none,format=qcow2,file="${disk_img}",cache=none,aio=native ${STATUS_QUO})
+           -drive id=SystemDisk,if=none,format=qcow2,file="${disk_img}" ${STATUS_QUO})
   else
     # shellcheck disable=SC2054,SC2206
     args+=(-device virtio-blk-pci,drive=SystemDisk
-           -drive id=SystemDisk,if=none,format=qcow2,file="${disk_img}",cache=none,aio=native ${STATUS_QUO}
+           -drive id=SystemDisk,if=none,format=qcow2,file="${disk_img}" ${STATUS_QUO}
            -device ${USB_HOST_PASSTHROUGH_CONTROLLER},id=spicepass
            -chardev spicevmc,id=usbredirchardev1,name=usbredir
            -device usb-redir,chardev=usbredirchardev1,id=usbredirdev1
@@ -903,14 +940,15 @@ function usage() {
   echo "You can also pass optional parameters"
   echo "  --delete                : Delete the disk image."
   echo "  --display               : Select display backend. 'sdl' (default), 'gtk' or 'spice'"
+  echo "  --fullscreen            : Starts VM in full screen mode (Ctl+Alt+f to exit)"
+  echo "  --ignore-msrs-always    : Configure KVM to always ignore unhandle machine-specific registers"
+  echo "  --screen <screen>       : Use specified screen to determine the window size."
   echo "  --shortcut              : Create a desktop shortcut"
   echo "  --snapshot apply <tag>  : Apply/restore a snapshot."
   echo "  --snapshot create <tag> : Create a snapshot."
   echo "  --snapshot delete <tag> : Delete a snapshot."
   echo "  --snapshot info         : Show disk/snapshot info."
   echo "  --status-quo            : Do not commit any changes to disk/snapshot."
-  echo "  --fullscreen            : Starts VM in full screen mode (Ctl+Alt+f to exit)"
-  echo "  --screen <screen>       : Use specified screen to determine the window size."
   echo "  --version               : Print version"
   exit 1
 }
@@ -953,7 +991,7 @@ VMPATH=""
 
 readonly LAUNCHER=$(basename "${0}")
 readonly DISK_MIN_SIZE=$((197632 * 8))
-readonly VERSION="2.2.5"
+readonly VERSION="2.2.6"
 
 # PUBLICSHARE is the only directory exposed to guest VMs for file
 # sharing via 9P, spice-webdavd and Samba. This path is not configurable.
@@ -1007,6 +1045,17 @@ else
             fi
             shift
             shift;;
+          -fullscreen|--fullscreen|-full-screen|--full-screen)
+            FULLSCREEN="-full-screen"
+            FULLSPICY="--full-screen"
+            shift;;
+          -ignore-msrs-always|--ignore-msrs-always)
+            ignore_msrs_always
+            exit;;
+          -screen|--screen)
+            SCREEN="${2}"
+            shift
+            shift;;
           -snapshot|--snapshot)
             SNAPSHOT_ACTION="${2}"
             if [ -z "${SNAPSHOT_ACTION}" ]; then
@@ -1024,20 +1073,12 @@ else
           -status-quo|--status-quo)
             STATUS_QUO="-snapshot"
             shift;;
-          -fullscreen|--fullscreen|-full-screen|--full-screen)
-            FULLSCREEN="-full-screen"
-            FULLSPICY="--full-screen"
+          -shortcut|--shortcut)
+            SHORTCUT=1
             shift;;
           -vm|--vm)
             VM="${2}"
             shift
-            shift;;
-          -screen|--screen)
-            SCREEN="${2}"
-            shift
-            shift;;
-          -shortcut|--shortcut)
-            SHORTCUT=1
             shift;;
           -version|--version)
             echo "${VERSION}"
