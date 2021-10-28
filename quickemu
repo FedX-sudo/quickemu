@@ -376,6 +376,12 @@ function vm_boot() {
         elif [ -e "/usr/share/OVMF/x64/OVMF_CODE.secboot.fd" ]; then
           EFI_CODE="/usr/share/OVMF/x64/OVMF_CODE.secboot.fd"
           efi_vars "/usr/share/OVMF/x64/OVMF_VARS.fd" "${EFI_VARS}"
+        elif [ -e "/nix/store/c9ppl07r3368dq2h2q76899qf02gq3gf-OVMF-202102-fd/FV/OVMF.fd" ]; then 
+          EFI_CODE="/nix/store/c9ppl07r3368dq2h2q76899qf02gq3gf-OVMF-202102-fd/FV/OVMF_CODE.fd"
+          efi_vars "/nix/store/c9ppl07r3368dq2h2q76899qf02gq3gf-OVMF-202102-fd/OVMF_VARS.fd" "${EFI_VARS}"
+
+
+        
         else
           echo "ERROR! SecureBoot was requested but no SecureBoot capable firmware was found."
           echo "       Please install OVMF firmware."
