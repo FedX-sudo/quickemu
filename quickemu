@@ -656,21 +656,7 @@ function vm_boot() {
 
   echo -n " - Display:  ${OUTPUT^^}, ${DISPLAY_DEVICE}"
 
-  # Build the video configuration
-  VIDEO="-device ${DISPLAY_DEVICE}"
-
-  # Try and coerce the display resolution for Linux guests only.
-  if [ "${guest_os}" == "linux" ]; then
-    VIDEO="${VIDEO},xres=${X_RES},yres=${Y_RES}"
-  fi
-
-  # Allocate VRAM to VGA devices
-  if [ "${DISPLAY_DEVICE}" == "qxl-vga" ] || [ "${DISPLAY_DEVICE}" == "VGA" ]; then
-    VIDEO="${VIDEO},vgamem_mb=128"
-  fi
-  VIDEO="${VIDEO} ${FULLSCREEN}"
-
-  # Map Quickemu OUTPUT to QEMU -display
+# Map Quickemu OUTPUT to QEMU -display
   case ${OUTPUT} in
     gtk)
       DISPLAY_RENDER="${OUTPUT},grab-on-hover=on,zoom-to-fit=off"
@@ -695,6 +681,20 @@ function vm_boot() {
   else
     echo ", GL (${GL}), VirGL (off)"
   fi
+
+  # Build the video configuration
+  VIDEO="-device ${DISPLAY_DEVICE}"
+
+  # Try and coerce the display resolution for Linux guests only.
+  if [ "${guest_os}" == "linux" ]; then
+    VIDEO="${VIDEO},xres=${X_RES},yres=${Y_RES}"
+  fi
+
+  # Allocate VRAM to VGA devices
+  if [ "${DISPLAY_DEVICE}" == "qxl-vga" ] || [ "${DISPLAY_DEVICE}" == "VGA" ]; then
+    VIDEO="${VIDEO},vgamem_mb=128"
+  fi
+  VIDEO="${VIDEO} ${FULLSCREEN}"
 
   # Set the hostname of the VM
   local NET="user,hostname=${VMNAME}"
@@ -1013,7 +1013,7 @@ VMPATH=""
 
 readonly LAUNCHER=$(basename "${0}")
 readonly DISK_MIN_SIZE=$((197632 * 8))
-readonly VERSION="2.2.8"
+readonly VERSION="2.3.1"
 
 # PUBLICSHARE is the only directory exposed to guest VMs for file
 # sharing via 9P, spice-webdavd and Samba. This path is not configurable.
